@@ -72,7 +72,7 @@ const float fAvgEyeSpeed  = 0.5;   // my eyes, when I focus on something.
 const int iInitialFrames = 15;
 
 // Max iterations
-const int iMaxiters = 1000;
+const int iMaxiters = 300;
 
 // Regularization parameter
 const float fGama = 5.0;  // regularization parameter

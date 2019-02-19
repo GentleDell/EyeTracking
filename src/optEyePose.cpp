@@ -3,46 +3,72 @@
 #define sind(x) (sin(fmod((x),360) * M_PI / 180))
 
 /*
+ * Constructor of SGD optimizor
+ */
+SGDOptimizer::SGDOptimizer(){}
+
+/*
  * Initialize eyepose data and thresholds for the median filter
  * Set the update Matrix
  */
-SGDOptimizer::SGDOptimizer(vector<cv::Point> vLeftEyePosition, vector<cv::Point> vRightEyePosition, float f )
-{
-     for (std::vector<cv::Point>::iterator it = vLeftEyePosition.begin() ; it != vLeftEyePosition.end(); ++it)
+void SGDOptimizer::Initialize(vector<cv::Point> vLeftEyePosition, vector<cv::Point> vRightEyePosition, double f )
+{    
+    // if the number of data is enough for initialization
+     if (vLeftEyePosition.size() >= iInitialFrames)
      {
-         vleftx << it->x;
-         vlefty << it->y;
+         vleftx  = Eigen::VectorXd::Zero(iInitialFrames);
+         vlefty  = Eigen::VectorXd::Zero(iInitialFrames);
+         vrightx = Eigen::VectorXd::Zero(iInitialFrames);
+         vrighty = Eigen::VectorXd::Zero(iInitialFrames);
+
+         // initialize pose data
+         for (int ct = 0; ct < iInitialFrames; ct++)
+         {
+             vleftx(ct) = vLeftEyePosition[ct].x;
+             vlefty(ct) = vLeftEyePosition[ct].y;
+
+             vrightx(ct) = vRightEyePosition[ct].x;
+             vrighty(ct) = vRightEyePosition[ct].y;
+         }
+
+         // initialize optimzied pose data
+         voptleftx  = vleftx;
+         voptlefty  = vlefty;
+         voptrightx = vrightx;
+         voptrighty = vrighty;
+
+         // initialize thresholds for median filter
+         if(bUseOptField)
+         {
+             // assume screen is inside the optimal vision field (explained in the load_parameters.m)
+             ThresDiffUpDown = 2*fEyeRadius*sind(iOptUpward)*f/fInitCamFaceDist;
+             ThresDiffLefRig = 2*fEyeRadius* sind(iOptLeft) *f/fInitCamFaceDist;
+         }
+         else
+         {
+             // assume screen is inside the maximal vision field (explained in the load_parameters.m)
+             ThresDiffUpDown = fEyeRadius*( sind(iMaxUpward) + sind(iMaxDownward) )*f/fInitCamFaceDist;
+             ThresDiffLefRig = 2*fEyeRadius* sind(iMaxLeft) *f/fInitCamFaceDist;
+         }
+
+         // focal length and screen-face distance
+         focal = f;
+         vScFaceDist = fInitCamFaceDist * Eigen::VectorXd::Ones(iInitialFrames);
+
+         // Matrix to update pose data
+         //     Superdiagnoal entries and the last entry are set to be 1
+         updateMat =  Eigen::MatrixXd::Zero(iInitialFrames,iInitialFrames);
+         updateMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
+         updateMat(iInitialFrames - 1, iInitialFrames - 1) = 1;
+
+         // Matrix to compute the difference of pose vector
+         diffMat = - Eigen::Matrix<double, iInitialFrames-1, iInitialFrames>::Identity();
+         diffMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
      }
-
-     for (std::vector<cv::Point>::iterator it = vRightEyePosition.begin() ; it != vRightEyePosition.end(); ++it)
-     {
-         vrightx << it->x;
-         vrighty << it->y;
+     else {
+         printf ("Too few data are given!");
+         exit (EXIT_FAILURE);
      }
-
-     if(bUseOptField)
-     {
-         // assume screen is inside the optimal vision field (explained in the load_parameters.m)
-         ThresDiffUpDown = 2*fEyeRadius*sind(iOptUpward)*f/fInitCamFaceDist;
-         ThresDiffLefRig = 2*fEyeRadius* sind(iOptLeft) *f/fInitCamFaceDist;
-     }
-     else
-     {
-         // assume screen is inside the maximal vision field (explained in the load_parameters.m)
-         ThresDiffUpDown = fEyeRadius*( sind(iMaxUpward) + sind(iMaxDownward) )*f/fInitCamFaceDist;
-         ThresDiffLefRig = 2*fEyeRadius* sind(iMaxLeft) *f/fInitCamFaceDist;
-     }
-
-     focal = f;
-     ScFaceDist = fInitCamFaceDist * Eigen::VectorXd::Ones(iInitialFrames);
-
-     // Superdiagnoal entries are set to be 1
-     updateMat =  Eigen::MatrixXd::Zero(iInitialFrames,iInitialFrames);
-     updateMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
-     updateMat(iInitialFrames - 1, iInitialFrames - 1) = 1;
-
-     diffMat = - Eigen::Matrix<double, iInitialFrames-1, iInitialFrames>::Identity();
-     diffMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
 }
 
 /*
@@ -59,6 +85,9 @@ void SGDOptimizer::update(cv::Point pLeftEyePosition, cv::Point pRightEyePositio
     vrighty = updateMat*vrighty;
     vrightx(iInitialFrames - 1) = pRightEyePosition.x;
     vrighty(iInitialFrames - 1) = pRightEyePosition.y;
+
+    vScFaceDist = updateMat*vScFaceDist;
+    vScFaceDist(iInitialFrames - 1) = fInitCamFaceDist;
 }
 
 /*
@@ -70,32 +99,28 @@ void SGDOptimizer::update(cv::Point pLeftEyePosition, cv::Point pRightEyePositio
  */
 void SGDOptimizer::MedianFilter( Eigen::VectorXd &vEyePosition, bool horizontal )
 {
+    double max_data = 0, min_data = 0, means = 0;
     Eigen::VectorXd diff_eyepose;
-    Eigen::VectorXd temp_pose_forw = vEyePosition, temp_pose_back = vEyePosition; // difference of neighboring elements
-
-    temp_pose_forw.head(iInitialFrames-1) = vEyePosition.tail(iInitialFrames-1);
-    temp_pose_back.tail(iInitialFrames-1) = vEyePosition.head(iInitialFrames-1);
 
     // checking horizontal data
     if (horizontal){
-        // find backward outliers: ( x(i) - x(i+1) > threshold )
-        diff_eyepose = vEyePosition - temp_pose_forw;
-        vEyePosition = ( diff_eyepose.array() >= ThresDiffLefRig ).select(temp_pose_forw, vEyePosition);
 
-        // find forward outliers: ( x(i+1) - x(i) > threshold )
-        diff_eyepose = vEyePosition - temp_pose_back;
-        vEyePosition = ( diff_eyepose.array() >= ThresDiffLefRig ).select(temp_pose_back, vEyePosition);
+        max_data = vEyePosition.maxCoeff();
+        min_data = vEyePosition.minCoeff();
+        means = vEyePosition.mean();
+
+        vEyePosition = ( (vEyePosition.array() - means) >= ThresDiffLefRig ).select(min_data, vEyePosition);
+        vEyePosition = ( (vEyePosition.array() - means) <= -ThresDiffLefRig ).select(max_data, vEyePosition);
     }
 
     // checking vertical data
     else {
-        // find backward outliers: ( x(i) - x(i+1) > threshold )
-        diff_eyepose = vEyePosition - temp_pose_forw;
-        vEyePosition = ( diff_eyepose.array() >= ThresDiffUpDown ).select(temp_pose_forw, vEyePosition);
+        max_data = vEyePosition.maxCoeff();
+        min_data = vEyePosition.minCoeff();
+        means = vEyePosition.mean();
 
-        // find forward outliers: ( x(i+1) - x(i) > threshold )
-        diff_eyepose = vEyePosition - temp_pose_back;
-        vEyePosition = ( diff_eyepose.array() >= ThresDiffUpDown ).select(temp_pose_back, vEyePosition);
+        vEyePosition = ( (vEyePosition.array() - means) >= ThresDiffUpDown ).select(min_data, vEyePosition);
+        vEyePosition = ( (vEyePosition.array() - means) <= -ThresDiffUpDown ).select(max_data, vEyePosition);
     }
 }
 
@@ -114,7 +139,7 @@ void SGDOptimizer::ComputeLoss()
 
     // Errors from perspective geometry
     // '*' here is element wise
-    vErrors = ( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) ) * ScFaceDist.array().pow(2) - std::pow(focal,2) * std::pow(fInterPupilDist, 2) ;
+    vErrors = ( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) ) * vScFaceDist.array().pow(2) - std::pow(focal,2) * std::pow(fInterPupilDist, 2) ;
 
     // Loss from measurements noise
     Loss_measure = (voptleftx  -  vleftx).dot(voptleftx - vleftx) +
@@ -127,7 +152,7 @@ void SGDOptimizer::ComputeLoss()
                             (diffMat * voptlefty).array().abs().sum() + (diffMat * voptrighty).array().abs().sum());
 
     Loss = (vErrors.dot(vErrors) + Loss_measure) / iInitialFrames + Loss_reg;
-    vErrors = vErrors/iInitialFrames;
+    vErrors = vErrors.array()/iInitialFrames;
 }
 
 /* compute_gradient:
@@ -139,10 +164,10 @@ void SGDOptimizer::ComputeGrad()
     Eigen::VectorXd temp_head0 = Eigen::VectorXd::Zero(iInitialFrames),
                     temp_end0  = Eigen::VectorXd::Zero(iInitialFrames);
 
-    Eigen::VectorXd squre_dist = ScFaceDist.array().pow(2);
+    Eigen::VectorXd squre_dist = vScFaceDist.array().pow(2);
 
     // transfer to array and conduct elementwise production  --  might have bugs !!!!!
-    svGradient.Grad_dist = 2 * (vErrors.array() * ( 2*( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) )) ).matrix() * ScFaceDist;
+    svGradient.Grad_dist = 2 * (vErrors.array() * ( 2*( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) )) ) * vScFaceDist.array();
 
     temp_head0.tail(iInitialFrames - 1) = (diffMat * voptleftx).array() / ( (diffMat * voptleftx).array().abs() + eps);
     temp_end0.head(iInitialFrames - 1)  = (diffMat * voptleftx).array() / ( (diffMat * voptleftx).array().abs() + eps);
@@ -190,11 +215,11 @@ void SGDOptimizer::JointOptimize()
         ComputeGrad();
 
         // update eye pose and screen-face distance
-        vleftx  = vleftx - learn_rate_pose * svGradient.Grad_lx;
-        vlefty  = vlefty - learn_rate_pose * svGradient.Grad_ly;
-        vrightx = vrightx - learn_rate_pose * svGradient.Grad_rx;
-        vrighty = vrighty - learn_rate_pose * svGradient.Grad_ry;
-        ScFaceDist = ScFaceDist - learn_rate_dist * svGradient.Grad_dist;
+        voptleftx  = voptleftx - learn_rate_pose * svGradient.Grad_lx;
+        voptlefty  = voptlefty - learn_rate_pose * svGradient.Grad_ly;
+        voptrightx = voptrightx - learn_rate_pose * svGradient.Grad_rx;
+        voptrighty = voptrighty - learn_rate_pose * svGradient.Grad_ry;
+        vScFaceDist = vScFaceDist - learn_rate_dist * svGradient.Grad_dist;
 
         // record total loss for visualization
         vLoss.push_back(Loss);

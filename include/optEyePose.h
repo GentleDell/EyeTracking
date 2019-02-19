@@ -22,8 +22,10 @@ struct Gradient
 class SGDOptimizer
 {
 public:
+    SGDOptimizer();
+
     // initialize the class with given point vectors
-    SGDOptimizer( vector<cv::Point> vLeftEyePosition, vector<cv::Point> vRightEyePosition , float f);
+    void Initialize( vector<cv::Point> vLeftEyePosition, vector<cv::Point> vRightEyePosition , double f);
 
     // filter outliers in the streamed data
     //     since there are different thresholds, the bool flag is needed
@@ -40,7 +42,7 @@ public:
     // append new measurements to the eyepose vector
     void update( cv::Point pLeftEyePosition, cv::Point pRightEyePosition );
 
-    float focal;
+    double focal;
 
     double Loss;
 
@@ -54,11 +56,9 @@ public:
 
     Eigen::MatrixXd updateMat, diffMat;  // matrix to update and differentiate pose vector
 
-    Eigen::VectorXd ScFaceDist;
+    Eigen::VectorXd vScFaceDist;
     Eigen::VectorXd vleftx, vlefty, vrightx, vrighty;
     Eigen::VectorXd voptleftx, voptlefty, voptrightx, voptrighty;
-
-    vector<cv::Point> vOptedLeft, vOptedRight;
 
 };
 
