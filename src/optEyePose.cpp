@@ -34,7 +34,7 @@ SGDOptimizer::SGDOptimizer(vector<cv::Point> vLeftEyePosition, vector<cv::Point>
      }
 
      focal = f;
-     ScFaceDist = fInitCamFaceDist;
+     ScFaceDist = fInitCamFaceDist * Eigen::VectorXd::Ones(iInitialFrames);
 
      // Superdiagnoal entries are set to be 1
      updateMat =  Eigen::MatrixXd::Zero(iInitialFrames,iInitialFrames);
@@ -114,7 +114,7 @@ void SGDOptimizer::ComputeLoss()
 
     // Errors from perspective geometry
     // '*' here is element wise
-    vErrors = ( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2)) * ( ScFaceDist.array().pow(2) ) - std::pow(focal,2) * std::pow(fInterPupilDist, 2) ;
+    vErrors = ( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) ) * ScFaceDist.array().pow(2) - std::pow(focal,2) * std::pow(fInterPupilDist, 2) ;
 
     // Loss from measurements noise
     Loss_measure = (voptleftx  -  vleftx).dot(voptleftx - vleftx) +
@@ -139,28 +139,29 @@ void SGDOptimizer::ComputeGrad()
     Eigen::VectorXd temp_head0 = Eigen::VectorXd::Zero(iInitialFrames),
                     temp_end0  = Eigen::VectorXd::Zero(iInitialFrames);
 
-    // transfer to array and conduct elementwise production
-    svGradient.Grad_dist = 2*vErrors.array() * ( 2*( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) ))*ScFaceDist;
+    Eigen::VectorXd squre_dist = ScFaceDist.array().pow(2);
 
+    // transfer to array and conduct elementwise production  --  might have bugs !!!!!
+    svGradient.Grad_dist = 2 * (vErrors.array() * ( 2*( (voptleftx - voptrightx).array().pow(2) + (voptlefty - voptrighty).array().pow(2) )) ).matrix() * ScFaceDist;
 
     temp_head0.tail(iInitialFrames - 1) = (diffMat * voptleftx).array() / ( (diffMat * voptleftx).array().abs() + eps);
     temp_end0.head(iInitialFrames - 1)  = (diffMat * voptleftx).array() / ( (diffMat * voptleftx).array().abs() + eps);
-    svGradient.Grad_lx   = 2*vErrors.array() * ( 2*( voptleftx - voptrightx ) * ( std::pow(ScFaceDist,2)) ).array() + 2*( voptleftx - vleftx ).array()/iInitialFrames +
+    svGradient.Grad_lx   = 2*vErrors.array() * ( 2*( voptleftx - voptrightx ).array() * squre_dist.array() ) + 2*( voptleftx - vleftx ).array()/iInitialFrames +
                            fGamaStr * temp_head0.array() - fGamaStr * temp_end0.array();
 
     temp_head0.tail(iInitialFrames - 1) = (diffMat * voptrightx).array() / ( (diffMat * voptrightx).array().abs() + eps);
     temp_end0.head(iInitialFrames - 1)  = (diffMat * voptrightx).array() / ( (diffMat * voptrightx).array().abs() + eps);
-    svGradient.Grad_rx   = 2*vErrors.array() * (-2*( voptleftx - voptrightx ) * ( std::pow(ScFaceDist,2)) ).array() + 2*( voptrightx - vrightx ).array()/iInitialFrames +
+    svGradient.Grad_rx   = 2*vErrors.array() * (-2*( voptleftx - voptrightx ).array() * squre_dist.array() ) + 2*( voptrightx - vrightx ).array()/iInitialFrames +
                            fGamaStr * temp_head0.array() - fGamaStr * temp_end0.array();
 
     temp_head0.tail(iInitialFrames - 1) = (diffMat * voptlefty).array() / ( (diffMat * voptlefty).array().abs() + eps);
     temp_end0.head(iInitialFrames - 1)  = (diffMat * voptlefty).array() / ( (diffMat * voptlefty).array().abs() + eps);
-    svGradient.Grad_ly   = 2*vErrors.array() * ( 2*( voptlefty - voptrighty ) * ( std::pow(ScFaceDist,2)) ).array() + 2*( voptlefty - vlefty ).array()/iInitialFrames +
+    svGradient.Grad_ly   = 2*vErrors.array() * ( 2*( voptlefty - voptrighty ).array() * squre_dist.array() ) + 2*( voptlefty - vlefty ).array()/iInitialFrames +
                            fGamaStr * temp_head0.array() - fGamaStr * temp_end0.array();
 
     temp_head0.tail(iInitialFrames - 1) = (diffMat * voptrighty).array() / ( (diffMat * voptrighty).array().abs() + eps);
     temp_end0.head(iInitialFrames - 1)  = (diffMat * voptrighty).array() / ( (diffMat * voptrighty).array().abs() + eps);
-    svGradient.Grad_ry   = 2*vErrors.array() * (-2*( voptlefty - voptrighty ) * ( std::pow(ScFaceDist,2)) ).array() + 2*( voptrighty - vrighty).array()/iInitialFrames +
+    svGradient.Grad_ry   = 2*vErrors.array() * (-2*( voptlefty - voptrighty ).array() * squre_dist.array() ) + 2*( voptrighty - vrighty).array()/iInitialFrames +
                            fGamaStr * temp_head0.array() - fGamaStr * temp_end0.array();
 }
 
