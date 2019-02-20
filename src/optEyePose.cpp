@@ -31,12 +31,6 @@ void SGDOptimizer::Initialize(vector<cv::Point> vLeftEyePosition, vector<cv::Poi
              vrighty(ct) = vRightEyePosition[ct].y;
          }
 
-         // initialize optimzied pose data
-         voptleftx  = vleftx;
-         voptlefty  = vlefty;
-         voptrightx = vrightx;
-         voptrighty = vrighty;
-
          // initialize thresholds for median filter
          if(bUseOptField)
          {
@@ -200,6 +194,12 @@ void SGDOptimizer::JointOptimize()
 {
     int   ct = 0;    // iteration counter
     double learn_rate_pose, learn_rate_dist;
+
+    // initialize optimzied pose data
+    voptleftx  = vleftx;
+    voptlefty  = vlefty;
+    voptrightx = vrightx;
+    voptrighty = vrighty;
 
     for ( ct = 0; ct <= iMaxiters; ct ++)
     {
