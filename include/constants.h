@@ -72,11 +72,11 @@ const float fAvgEyeSpeed  = 0.5;   // my eyes, when I focus on something.
 const int iInitialFrames = 15;
 
 // Max iterations
-const int iMaxiters = 300;
+const int iMaxiters = 100;
 
 // Regularization parameter
 const float fGama = 5.0;  // regularization parameter
-const float fGamaStr = 300.0;
+const float fGamaStr = 1000.0;
 
 // Learning rate for eye pose and screen-face distance
 // -- for GD, all data optimized together

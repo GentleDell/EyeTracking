@@ -31,10 +31,11 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include
     )
 add_library(${PROJECT_NAME} SHARED
-    src/findEyeCenter.cpp
-    src/findEyeCorner.cpp
+#    src/findEyeCenter.cpp
+#    src/findEyeCorner.cpp
+    src/findPupils.cpp
     src/optEyePose.cpp
-    src/helpers.cpp
+#    src/helpers.cpp
     )
 target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS}

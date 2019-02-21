@@ -7,7 +7,7 @@
  */
 SGDOptimizer::SGDOptimizer(){}
 
-/*
+/**
  * Initialize eyepose data and thresholds for the median filter
  * Set the update Matrix
  */
@@ -65,8 +65,8 @@ void SGDOptimizer::Initialize(vector<cv::Point> vLeftEyePosition, vector<cv::Poi
      }
 }
 
-/*
- * pop the first entry then push the new data in
+/**
+ * update data to be optimized
  */
 void SGDOptimizer::update(cv::Point pLeftEyePosition, cv::Point pRightEyePosition)
 {
@@ -84,7 +84,7 @@ void SGDOptimizer::update(cv::Point pLeftEyePosition, cv::Point pRightEyePositio
     vScFaceDist(iInitialFrames - 1) = fInitCamFaceDist;
 }
 
-/*
+/**
  * Median Filter:
  *      recover outliers using median value.
  * For data in the window, if the difference between a data and the median
@@ -118,7 +118,7 @@ void SGDOptimizer::MedianFilter( Eigen::VectorXd &vEyePosition, bool horizontal 
     }
 }
 
-/*
+/**
  * Compute Loss:
  *      compute the loss function and errors caused by perspective geometry.
  * The loss function involves three part: perspective geometry, noises and 1-norm
@@ -149,7 +149,8 @@ void SGDOptimizer::ComputeLoss()
     vErrors = vErrors.array()/iInitialFrames;
 }
 
-/* compute_gradient:
+/**
+ * compute_gradient:
  *      compute gradients of eye poses and screen-face distance
  */
 void SGDOptimizer::ComputeGrad()
@@ -184,7 +185,7 @@ void SGDOptimizer::ComputeGrad()
                            fGamaStr * temp_head0.array() - fGamaStr * temp_end0.array();
 }
 
-/*
+/**
  * joint_filter:
  *      jointly optimize screen-face distances and eyeposes
  * using gradient descent method to iteratively optimize
