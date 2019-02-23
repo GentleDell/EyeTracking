@@ -21,8 +21,10 @@ void PupilsTracker::Initializer()
 
     cv::namedWindow(main_window_name,CV_WINDOW_NORMAL);
     cv::moveWindow(main_window_name, 400, 100);
-    cv::namedWindow(face_window_name,CV_WINDOW_NORMAL);
-    cv::moveWindow(face_window_name, 10, 100);
+
+    // commented by zhantao deng@epfl, 23/02/2019
+//    cv::namedWindow(face_window_name,CV_WINDOW_NORMAL);
+//    cv::moveWindow(face_window_name, 10, 100);
 }
 
 /**
@@ -53,14 +55,20 @@ void PupilsTracker::DetectPupils(cv::Mat frame)
     for( int i = 0; i < faces.size(); i++ )
     {
     // draw a rectangle scaling by face[i], color 1234
-    rectangle(debugImage, faces[i], 1234);
+    rectangle(debugImage, faces[i], cv::Scalar(255, 255, 255));
     }
 
-
     //-- Show what you got
-    //
+    // if detected a face
     if (faces.size() > 0) {
-      FindEyes(frame_gray, faces[0]);
+
+        FindEyes(frame_gray, faces[0]);
+
+//        circle(debugImage, left_eyepos, 3, cv::Scalar(255, 255, 255));
+//        circle(debugImage, right_eyepos, 3, cv::Scalar(255, 255, 255));
+    }
+    else {
+        printf("Face tracking lost\n");
     }
 }
 
@@ -85,8 +93,8 @@ void PupilsTracker::FindEyes(cv::Mat frame_gray, cv::Rect face) {
                           eye_region_top,eye_region_width,eye_region_height);
 
   //-- Find Eye Centers
-  cv::Point leftPupil  = FindEyeCenter(faceROI,leftEyeRegion,"Left Eye");
-  cv::Point rightPupil = FindEyeCenter(faceROI,rightEyeRegion,"Right Eye");
+  cv::Point leftPupil  = FindEyeCenter(faceROI,leftEyeRegion);
+  cv::Point rightPupil = FindEyeCenter(faceROI,rightEyeRegion);
   // get corner regions
   cv::Rect leftRightCornerRegion(leftEyeRegion);
   leftRightCornerRegion.width -= leftPupil.x;
@@ -106,18 +114,23 @@ void PupilsTracker::FindEyes(cv::Mat frame_gray, cv::Rect face) {
   rightRightCornerRegion.x += rightPupil.x;
   rightRightCornerRegion.height /= 2;
   rightRightCornerRegion.y += rightRightCornerRegion.height / 2;
-  rectangle(debugFace,leftRightCornerRegion,200);
-  rectangle(debugFace,leftLeftCornerRegion,200);
-  rectangle(debugFace,rightLeftCornerRegion,200);
-  rectangle(debugFace,rightRightCornerRegion,200);
+
+//  commented by zhantao deng@epfl, 23/02/2019
+//  rectangle(debugFace,leftRightCornerRegion,200);
+//  rectangle(debugFace,leftLeftCornerRegion,200);
+//  rectangle(debugFace,rightLeftCornerRegion,200);
+//  rectangle(debugFace,rightRightCornerRegion,200);
+
   // change eye centers to face coordinates
   rightPupil.x += rightEyeRegion.x;
   rightPupil.y += rightEyeRegion.y;
   leftPupil.x += leftEyeRegion.x;
   leftPupil.y += leftEyeRegion.y;
+
+  // commented by zhantao deng@epfl, 23/02/2019
   // draw eye centers
-  circle(debugFace, rightPupil, 3, 1234);
-  circle(debugFace, leftPupil, 3, 1234);
+//  circle(debugFace, rightPupil, 3, 1234);
+//  circle(debugFace, leftPupil, 3, 1234);
 
   //-- Find Eye Corners
   if (kEnableEyeCorner) {
@@ -139,17 +152,24 @@ void PupilsTracker::FindEyes(cv::Mat frame_gray, cv::Rect face) {
     circle(faceROI, rightRightCorner, 3, 200);
   }
 
-  imshow(face_window_name, faceROI);
+// commented by zhantao deng@epfl, 23/02/2019, now we do not want to show the face
+//  imshow(face_window_name, faceROI);
+
+  left_eyepos  = cv::Point( leftPupil.x + face.x,  leftPupil.y + face.y );
+  right_eyepos = cv::Point(rightPupil.x + face.x, rightPupil.y + face.y );
 }
 
 
-cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye, std::string debugWindow)
+cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye)
 {
     cv::Mat eyeROIUnscaled = face(eye);
     cv::Mat eyeROI;
     scaleToFastSize(eyeROIUnscaled, eyeROI);
+
+    // commented by zhantao deng@epfl, 23/02/2019
     // draw eye region
-    rectangle(face,eye,1234);
+//    rectangle(face,eye,1234);
+
     //-- Find the gradient
     cv::Mat gradientX = computeMatXGradient(eyeROI);
     cv::Mat gradientY = computeMatXGradient(eyeROI.t()).t();
@@ -158,8 +178,7 @@ cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye, std::string d
     cv::Mat mags = matrixMagnitude(gradientX, gradientY);
     //compute the threshold
     double gradientThresh = computeDynamicThreshold(mags, kGradientThreshold);
-    //double gradientThresh = kGradientThreshold;
-    //double gradientThresh = 0;
+
     //normalize
     for (int y = 0; y < eyeROI.rows; ++y) {
       double *Xr = gradientX.ptr<double>(y), *Yr = gradientY.ptr<double>(y);
@@ -176,8 +195,7 @@ cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye, std::string d
         }
       }
     }
-  //  commented by zhantao deng @epfl 03/02/2019
-  //  imshow(debugWindow,gradientX);
+
     //-- Create a blurred and inverted image for weighting
     cv::Mat weight;
     GaussianBlur( eyeROI, weight, cv::Size( kWeightBlurSize, kWeightBlurSize ), 0, 0 );
@@ -187,15 +205,13 @@ cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye, std::string d
         row[x] = (255 - row[x]);
       }
     }
-    //imshow(debugWindow,weight);
+
     //-- Run the algorithm!
     cv::Mat outSum = cv::Mat::zeros(eyeROI.rows,eyeROI.cols,CV_64F);
     // for each possible gradient location
     // Note: these loops are reversed from the way the paper does them
     // it evaluates every possible center for each gradient location instead of
     // every possible gradient location for every center.
-
-    // printf("Eye Size: %ix%i\n",outSum.cols,outSum.rows);
 
     for (int y = 0; y < weight.rows; ++y) {
       const double *Xr = gradientX.ptr<double>(y), *Yr = gradientY.ptr<double>(y);
@@ -211,7 +227,7 @@ cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye, std::string d
     double numGradients = (weight.rows*weight.cols);
     cv::Mat out;
     outSum.convertTo(out, CV_32F,1.0/numGradients);
-    //imshow(debugWindow,out);
+
     //-- Find the maximum point
     cv::Point maxP;
     double maxVal;
@@ -227,8 +243,7 @@ cv::Point PupilsTracker::FindEyeCenter(cv::Mat face, cv::Rect eye, std::string d
         cv::imwrite("eyeFrame.png",eyeROIUnscaled);
       }
       cv::Mat mask = floodKillEdges(floodClone);
-      //imshow(debugWindow + " Mask",mask);
-      //imshow(debugWindow,out);
+
       // redo max
       cv::minMaxLoc(out, NULL,&maxVal,NULL,&maxP,mask);
     }

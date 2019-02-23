@@ -2,6 +2,7 @@
 #define FINDPUPILS_H
 
 #include <queue>
+#include <iostream>
 
 #include <opencv2/imgproc/imgproc.hpp>
 #include "opencv2/highgui/highgui.hpp"
@@ -22,7 +23,7 @@ public:
 
     void FindEyes(cv::Mat frame_gray, cv::Rect face);
 
-    cv::Point FindEyeCenter(cv::Mat face, cv::Rect eye, std::string debugWindow);
+    cv::Point FindEyeCenter(cv::Mat face, cv::Rect eye);
 
     cv::Point2f findEyeCorner(cv::Mat region, bool left, bool left2);
 
@@ -56,25 +57,8 @@ public:
     cv::String face_cascade_name;
     std::string main_window_name;
     std::string face_window_name;
+
+    cv::Point left_eyepos, right_eyepos;
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #endif

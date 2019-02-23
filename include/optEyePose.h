@@ -22,7 +22,9 @@ struct Gradient
 class SGDOptimizer
 {
 public:
-    SGDOptimizer();
+    SGDOptimizer(double f);
+
+    void receiver(cv::Point pLeftEyePosition, cv::Point pRightEyePosition);
 
     // initialize the class with given point vectors
     void Initialize( vector<cv::Point> vLeftEyePosition, vector<cv::Point> vRightEyePosition , double f);
@@ -42,6 +44,11 @@ public:
     // append new measurements to the eyepose vector
     void update( cv::Point pLeftEyePosition, cv::Point pRightEyePosition );
 
+
+
+public:
+    bool initiated;
+
     double focal;
 
     double Loss;
@@ -59,6 +66,8 @@ public:
     Eigen::VectorXd vScFaceDist;
     Eigen::VectorXd vleftx, vlefty, vrightx, vrighty;
     Eigen::VectorXd voptleftx, voptlefty, voptrightx, voptrighty;
+
+    std::vector<cv::Point> vInit_LeftEyePosition, vInit_RightEyePosition;
 
 };
 

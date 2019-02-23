@@ -5,68 +5,87 @@
 /*
  * Constructor of SGD optimizor
  */
-SGDOptimizer::SGDOptimizer(){}
+SGDOptimizer::SGDOptimizer(double f){
+    focal = f;
+    initiated = false;
+}
 
-/**
+void SGDOptimizer::receiver(cv::Point pLeftEyePosition, cv::Point pRightEyePosition)
+{
+    if (vInit_LeftEyePosition.size() < iInitialFrames && !initiated){
+
+        vInit_LeftEyePosition.push_back(pLeftEyePosition);
+        vInit_RightEyePosition.push_back(pRightEyePosition);
+    }
+    else if (vInit_LeftEyePosition.size() == iInitialFrames && !initiated)
+    {
+        Initialize(vInit_LeftEyePosition, vInit_RightEyePosition, focal);
+        vInit_LeftEyePosition.clear();
+        vInit_RightEyePosition.clear();
+
+        optimize();
+    }
+    else
+    {
+        update(pLeftEyePosition, pRightEyePosition);
+        optimize();
+    }
+}
+
+/*
  * Initialize eyepose data and thresholds for the median filter
  * Set the update Matrix
  */
 void SGDOptimizer::Initialize(vector<cv::Point> vLeftEyePosition, vector<cv::Point> vRightEyePosition, double f )
-{    
-    // if the number of data is enough for initialization
-     if (vLeftEyePosition.size() >= iInitialFrames)
-     {
-         vleftx  = Eigen::VectorXd::Zero(iInitialFrames);
-         vlefty  = Eigen::VectorXd::Zero(iInitialFrames);
-         vrightx = Eigen::VectorXd::Zero(iInitialFrames);
-         vrighty = Eigen::VectorXd::Zero(iInitialFrames);
+{
+    initiated = true;
 
-         // initialize pose data
-         for (int ct = 0; ct < iInitialFrames; ct++)
-         {
-             vleftx(ct) = vLeftEyePosition[ct].x;
-             vlefty(ct) = vLeftEyePosition[ct].y;
+    vleftx  = Eigen::VectorXd::Zero(iInitialFrames);
+    vlefty  = Eigen::VectorXd::Zero(iInitialFrames);
+    vrightx = Eigen::VectorXd::Zero(iInitialFrames);
+    vrighty = Eigen::VectorXd::Zero(iInitialFrames);
 
-             vrightx(ct) = vRightEyePosition[ct].x;
-             vrighty(ct) = vRightEyePosition[ct].y;
-         }
+    // initialize pose data
+    for (int ct = 0; ct < iInitialFrames; ct++)
+    {
+     vleftx(ct) = vLeftEyePosition[ct].x;
+     vlefty(ct) = vLeftEyePosition[ct].y;
 
-         // initialize thresholds for median filter
-         if(bUseOptField)
-         {
-             // assume screen is inside the optimal vision field (explained in the load_parameters.m)
-             ThresDiffUpDown = 2*fEyeRadius*sind(iOptUpward)*f/fInitCamFaceDist;
-             ThresDiffLefRig = 2*fEyeRadius* sind(iOptLeft) *f/fInitCamFaceDist;
-         }
-         else
-         {
-             // assume screen is inside the maximal vision field (explained in the load_parameters.m)
-             ThresDiffUpDown = fEyeRadius*( sind(iMaxUpward) + sind(iMaxDownward) )*f/fInitCamFaceDist;
-             ThresDiffLefRig = 2*fEyeRadius* sind(iMaxLeft) *f/fInitCamFaceDist;
-         }
+     vrightx(ct) = vRightEyePosition[ct].x;
+     vrighty(ct) = vRightEyePosition[ct].y;
+    }
 
-         // focal length and screen-face distance
-         focal = f;
-         vScFaceDist = fInitCamFaceDist * Eigen::VectorXd::Ones(iInitialFrames);
+    // initialize thresholds for median filter
+    if(bUseOptField)
+    {
+     // assume screen is inside the optimal vision field (explained in the load_parameters.m)
+     ThresDiffUpDown = 2*fEyeRadius*sind(iOptUpward)*f/fInitCamFaceDist;
+     ThresDiffLefRig = 2*fEyeRadius* sind(iOptLeft) *f/fInitCamFaceDist;
+    }
+    else
+    {
+     // assume screen is inside the maximal vision field (explained in the load_parameters.m)
+     ThresDiffUpDown = fEyeRadius*( sind(iMaxUpward) + sind(iMaxDownward) )*f/fInitCamFaceDist;
+     ThresDiffLefRig = 2*fEyeRadius* sind(iMaxLeft) *f/fInitCamFaceDist;
+    }
 
-         // Matrix to update pose data
-         //     Superdiagnoal entries and the last entry are set to be 1
-         updateMat =  Eigen::MatrixXd::Zero(iInitialFrames,iInitialFrames);
-         updateMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
-         updateMat(iInitialFrames - 1, iInitialFrames - 1) = 1;
+    // focal length and screen-face distance
+    focal = f;
+    vScFaceDist = fInitCamFaceDist * Eigen::VectorXd::Ones(iInitialFrames);
 
-         // Matrix to compute the difference of pose vector
-         diffMat = - Eigen::Matrix<double, iInitialFrames-1, iInitialFrames>::Identity();
-         diffMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
-     }
-     else {
-         printf ("Too few data are given!");
-         exit (EXIT_FAILURE);
-     }
+    // Matrix to update pose data
+    //     Superdiagnoal entries and the last entry are set to be 1
+    updateMat =  Eigen::MatrixXd::Zero(iInitialFrames,iInitialFrames);
+    updateMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
+    updateMat(iInitialFrames - 1, iInitialFrames - 1) = 1;
+
+    // Matrix to compute the difference of pose vector
+    diffMat = - Eigen::Matrix<double, iInitialFrames-1, iInitialFrames>::Identity();
+    diffMat.diagonal(1) = Eigen::VectorXd::Ones(iInitialFrames - 1);
 }
 
-/**
- * update data to be optimized
+/*
+ * pop the first entry then push the new data in
  */
 void SGDOptimizer::update(cv::Point pLeftEyePosition, cv::Point pRightEyePosition)
 {
@@ -84,7 +103,7 @@ void SGDOptimizer::update(cv::Point pLeftEyePosition, cv::Point pRightEyePositio
     vScFaceDist(iInitialFrames - 1) = fInitCamFaceDist;
 }
 
-/**
+/*
  * Median Filter:
  *      recover outliers using median value.
  * For data in the window, if the difference between a data and the median
@@ -118,7 +137,7 @@ void SGDOptimizer::MedianFilter( Eigen::VectorXd &vEyePosition, bool horizontal 
     }
 }
 
-/**
+/*
  * Compute Loss:
  *      compute the loss function and errors caused by perspective geometry.
  * The loss function involves three part: perspective geometry, noises and 1-norm
@@ -149,8 +168,7 @@ void SGDOptimizer::ComputeLoss()
     vErrors = vErrors.array()/iInitialFrames;
 }
 
-/**
- * compute_gradient:
+/* compute_gradient:
  *      compute gradients of eye poses and screen-face distance
  */
 void SGDOptimizer::ComputeGrad()
@@ -185,7 +203,7 @@ void SGDOptimizer::ComputeGrad()
                            fGamaStr * temp_head0.array() - fGamaStr * temp_end0.array();
 }
 
-/**
+/*
  * joint_filter:
  *      jointly optimize screen-face distances and eyeposes
  * using gradient descent method to iteratively optimize
